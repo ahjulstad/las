@@ -75,21 +75,14 @@ class LASItem(object):
 
     @classmethod
     def from_line(cls, line):
-        first, descr = line.rsplit(':', 1)
-        descr = descr.strip()
-        name, mid = first.split('.', 1)
-        name = name.strip()
-        if mid.startswith(' '):
-            # No units
-            units = ''
-            data = mid
-        else:
-            units_data = mid.split(None, 1)
-            if len(units_data) == 1:
-                units = units_data[0]
-                data = ''
-            else:
-                units, data = units_data
+        # Some comments on the matching: The standard is ambiguous on how colons may appear.
+        # In addition, relevant input is not conforming to the standard, it appears.
+        # Colons may appear both as a field separator, and in date fields, appearing both
+        # as descriptions and as data values. The regexp as it stands now looks for a
+        # colon and one or more whitespace to separate the data value and the description.
+        name, units, data, descr = \
+            re.match(r"([^\.: \t\[\]\|]*)\s*\.([^\.: \t\[\]\|]*)?\s*([^{}\|]*)?:\s+(.*)", line).groups()
+
         return LASItem(name=name, units=units, data=data.strip(),
                        descr=descr.strip())
 
