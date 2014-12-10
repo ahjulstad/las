@@ -24,6 +24,9 @@ import re
 import keyword
 
 import numpy as np
+import pandas as pd
+import datetime
+import dateutil.parser
 
 
 def isidentifier(s):
@@ -266,9 +269,10 @@ class LASReader(object):
         Units of the 'STEP' item from the '~W' section.
         The value will be None if 'STEP' was not given in the file.
 
-    to_dataframe(): pandas.Dataframe
-        Creates a pandas Dataframe from the data, with proper
-        date index. This assumes the dates are provided in the LAS file
+    dataframe: pandas.Dataframe
+        Returns a pandas Dataframe from the data, with proper
+        date index. 
+        This assumes the dates are provided in the LAS file
         as comments to the STRT field
 
     """
@@ -298,9 +302,10 @@ class LASReader(object):
 
         self._read_las(f)
 
-        self.data2d = self.data.view(float).reshape(-1, len(self.curves.items))
+        self.data2d = self.data.reshape(-1, len(self.curves.items))
         if null_subs is not None:
             self.data2d[self.data2d == self.null] = null_subs
+        self.dataframe = self.to_dataframe()
 
     def _read_las(self, f):
         """Read a LAS file.
@@ -374,14 +379,24 @@ class LASReader(object):
                                 self.wrap = True
                         if m.name == 'VERS':
                             self.vers = m.data.strip()
+                            
+                    def __parsepossibledate(data):
+                        try:
+                            return float(data)
+                        except ValueError:
+                            try:
+                                return dateutil.parser.parse(data)
+                            except ValueError as ex:
+                                raise(ex)
+                                
                     if current_section == self.well:
                         if m.name == 'NULL':
                             self.null = float(m.data)
                         elif m.name == 'STRT':
-                            self.start = float(m.data)
+                            self.start = __parsepossibledate(m.data)
                             self.start_units = m.units
                         elif m.name == 'STOP':
-                            self.stop = float(m.data)
+                            self.stop = __parsepossibledate(m.data)
                             self.stop_units = m.units
                         elif m.name == 'STEP':
                             self.step = float(m.data)
@@ -399,20 +414,27 @@ class LASReader(object):
         if self.wrap:
             a = _read_wrapped_data(f, dt)
         else:
-            a = np.loadtxt(f, dtype=dt)
+            df = pd.read_table(f, skipinitialspace=True, delimiter=' ', 
+                               header=None, names=self.curves.names, 
+                               index_col=0)
+            self._read_dataframe = df
+            a = np.hstack([df.index.values.reshape((-1,1)), df.values])
         self.data = a
 
         if opened_here:
             f.close()
 
     def to_dataframe(self):
-        import datetime
-        import pandas as pd
-        startdate = np.datetime64(datetime.datetime.strptime( 
-            self.well.STRT.descr, '%Y/%m/%d %H:%M'))
-        idx = np.array(self.data['TIME'],dtype='timedelta64[s]')
-        
-        pdidx = pd.DatetimeIndex(startdate + idx)     
-        data = pd.DataFrame(self.data, index = pdidx)
-        return data
+        if self.well.STRT.units=='s':
+            startdate = np.datetime64(datetime.datetime.strptime( 
+                self.well.STRT.descr, '%Y/%m/%d %H:%M'))
+            idx = np.array(self.data['TIME'],dtype='timedelta64[s]')
+            
+            pdidx = pd.DatetimeIndex(startdate + idx)     
+            data = pd.DataFrame(self.data, index = pdidx)
+            return data
+        elif getattr(self, '_read_dataframe', None) is not None:
+            return self._read_dataframe
+        else:
+            return pd.DataFrame(self.data)
         
