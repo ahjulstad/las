@@ -299,13 +299,12 @@ class LASReader(object):
         self.parameters = LASSection()
         self.other = ''
         self.data = None
+        self.dataframe = None
 
         self._read_las(f)
 
-        self.data2d = self.data.reshape(-1, len(self.curves.items))
         if null_subs is not None:
-            self.data2d[self.data2d == self.null] = null_subs
-        self.dataframe = self.to_dataframe()
+            self.dataframe[self.dataframe == self.null] = null_subs
 
     def _read_las(self, f):
         """Read a LAS file.
@@ -412,29 +411,14 @@ class LASReader(object):
         # The data type is determined by the items from the '~Curves' section.
         dt = np.dtype([(name, float) for name in self.curves.names])
         if self.wrap:
-            a = _read_wrapped_data(f, dt)
+            self.data = _read_wrapped_data(f, dt)
+            self.dataframe = pd.DataFrame(self.data)
         else:
-            df = pd.read_table(f, skipinitialspace=True, delimiter=' ', 
+            self.dataframe = pd.read_table(f, skipinitialspace=True, delimiter=' ', 
                                header=None, names=self.curves.names, 
                                index_col=0)
-            self._read_dataframe = df
-            a = np.hstack([df.index.values.reshape((-1,1)), df.values])
-        self.data = a
+            self.data = np.hstack([self.dataframe.index.values.reshape((-1,1)), 
+                                   self.dataframe.values])
 
         if opened_here:
             f.close()
-
-    def to_dataframe(self):
-        if self.well.STRT.units=='s':
-            startdate = np.datetime64(datetime.datetime.strptime( 
-                self.well.STRT.descr, '%Y/%m/%d %H:%M'))
-            idx = np.array(self.data['TIME'],dtype='timedelta64[s]')
-            
-            pdidx = pd.DatetimeIndex(startdate + idx)     
-            data = pd.DataFrame(self.data, index = pdidx)
-            return data
-        elif getattr(self, '_read_dataframe', None) is not None:
-            return self._read_dataframe
-        else:
-            return pd.DataFrame(self.data)
-        
