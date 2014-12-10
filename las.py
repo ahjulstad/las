@@ -91,7 +91,7 @@ class LASItem(object):
         # as descriptions and as data values. The regexp as it stands now looks for a
         # colon and one or more whitespace to separate the data value and the description.
         name, units, data, descr = \
-            re.match(r"([^\.: \t\[\]\|]*)\s*\.([^\.: \t\[\]\|]*)?\s*([^{}\|]*)?:\s+(.*)", line).groups()
+            re.match(r"([^\.]*)\s*\.([^\s]*)?\s*([^{}\|]*)?:\s+(.*)", line).groups()
 
         return LASItem(name=name, units=units, data=data.strip(),
                        descr=descr.strip())
